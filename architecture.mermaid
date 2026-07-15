@@ -1,0 +1,47 @@
+graph TD
+    classDef deterministic fill:#FFF59D,stroke:#333,stroke-width:2px,color:#000;
+    classDef model fill:#90CAF9,stroke:#333,stroke-width:2px,color:#000;
+    classDef human fill:#FFB74D,stroke:#333,stroke-width:2px,color:#000;
+    classDef safe fill:#A5D6A7,stroke:#333,stroke-width:2px,color:#000;
+    classDef alert fill:#EF9A9A,stroke:#333,stroke-width:2px,color:#000;
+    classDef base fill:#E0E0E0,stroke:#333,stroke-width:2px,color:#000;
+
+    userInput([User Input]) --> layer1[Layer 1: ContentFilterMiddleware<br>Deterministic Input Filter]
+    class userInput base;
+    class layer1 deterministic;
+
+    layer1 -- Allowed --> layer2[Layer 2: PIIMiddleware<br>PII Redaction on Input]
+    layer1 -- Blocked/Violation --> endRun([Fallback Safe Response])
+    class layer2 deterministic;
+    class endRun alert;
+
+    layer2 --> agentCore{Agent Core<br>LLM Execution Loop}
+    class agentCore model;
+
+    agentCore --> toolVerify{Is Tool Sensitive?}
+    class toolVerify base;
+    
+    toolVerify -- "Yes (e.g. send_email, book_appointment)" --> layer3[Layer 3: HumanInTheLoopMiddleware<br>Awaiting Action Approval]
+    class layer3 human;
+
+    toolVerify -- "No (e.g. search_web, general_tool)" --> execTool[Execute Tool]
+    class execTool deterministic;
+
+    layer3 -- Approved --> execTool
+    layer3 -- Rejected --> fallbackRejection[Standard Rejection Response]
+    class fallbackRejection alert;
+    
+    execTool --> agentCore
+    fallbackRejection --> layer4[Layer 4: PIIMiddleware<br>PII Redaction on Output]
+
+    agentCore -- Execution Completed --> layer4
+    class layer4 deterministic;
+
+    layer4 --> layer5[Layer 5: SafetyGuardrailMiddleware<br>Model-Based Output Safety Validator]
+    class layer5 model;
+
+    layer5 -- Safe --> outputResponse([User Response])
+    layer5 -- Unsafe --> safetyFallback[Safety Fallback Message]
+    class outputResponse safe;
+    class safetyFallback alert;
+    safetyFallback --> outputResponse
